@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "*.tcc": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "fstream": "cpp",
+        "cmath": "cpp"
     }
 }
