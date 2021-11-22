@@ -56,7 +56,7 @@ void main_menu()
     while (true)
     {
 
-        cout << "File System Manipulation" << endl;
+        cout << "Simple File System" << endl;
         line();
         highlight_yellow("1. Create Disk\n");
         highlight_yellow("2. Mount Disk\n");
@@ -71,7 +71,7 @@ void main_menu()
         }
         else if (choice == 2)
         {
-            cout << " Enter disk name" << endl;
+            cout << "Enter disk name" << endl;
             cin >> disk_name;
             Disk disk = Disk(disk_name);
             if (disk.mount_disk())

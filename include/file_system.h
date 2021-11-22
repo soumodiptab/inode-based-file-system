@@ -75,15 +75,14 @@ class File
 {
 public:
     int inode;
+    string file_name;
     int file_descriptor;
     int meta_data_block;
-    string name;
-    // 0 - read 1 - write 2 - append
+    FileMetaData *metadata;
+    // 1 - read 2 - write 3 - append
     int mode;
     int last_byte;
     vector<pair<int, char *>> disk_blocks;
-    int load(int inode);
-    int read();
 };
 class Disk
 {
@@ -98,11 +97,12 @@ public:
     vector<int> free_inodes;
     vector<int> allocated_data_blocks;
     vector<int> free_data_blocks;
-    vector<int> file_descriptor;
+    vector<int> file_descriptor_reserve;
     // <filename| inode>
     unordered_map<string, int> file_info;
-    // <filedescriptor| File>
+    // filename | filedescriptor
     unordered_map<string, int> open_file_name_map;
+    // <filedescriptor| File>
     unordered_map<int, File> open_files;
     Disk()
     {
@@ -118,6 +118,7 @@ public:
     void persist_disk_meta_data();
     void load_disk_meta_data();
     void load_files_info();
+    void clear_inode(Inode *inode);
     FileMetaData *load_file_meta_data(Inode inode);
     void save_file_meta_data(Inode inode, FileMetaData *filemeta);
     void clear_file_meta_data(Inode inode);
@@ -131,6 +132,9 @@ public:
     void delete_file();
     void append_file();
     void close_file();
+    void list_files();
+    void list_open_files();
+
     // persist all metadata
     int unmount_disk();
     void disk_operations();
@@ -146,3 +150,4 @@ void highlight_blue(string message);
 void highlight_cyan(string message);
 void highlight_yellow(string message);
 void highlight_purple(string message);
+void line();

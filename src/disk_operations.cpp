@@ -22,52 +22,41 @@ SuperBlock *super_block_init()
     memset(super_block->data_block_map, 0, sizeof(sizeof(super_block->data_block_map)));
     return super_block;
 }
+void clear_inode(Inode *inode)
+{
+    inode->meta_data_block = -1;
+    memset(inode->pointers, -1, sizeof(inode->pointers));
+}
 void Disk::persist_disk_meta_data()
 {
-    char buffer[sizeof(SuperBlock)];
-    char inode_buffer[sizeof(inodes)];
-    memset(buffer, 0, sizeof(SuperBlock));
-    memcpy(buffer, &super_block, sizeof(SuperBlock));
     disk_stream.seekp(0, ios::beg);
-    disk_stream.write(buffer, sizeof(SuperBlock));
+    disk_stream.write((char *)super_block, sizeof(SuperBlock));
     disk_stream.seekp(super_block->inode_index * constants_disk_block_size, ios::beg);
-    memset(inode_buffer, 0, sizeof(inodes));
-    memcpy(inode_buffer, &inodes, sizeof(inodes));
-    disk_stream.write(inode_buffer, sizeof(inodes));
+    disk_stream.write((char *)inodes, sizeof(inodes));
 }
 void Disk::load_disk_meta_data()
 {
-    char buffer[sizeof(SuperBlock)];
-    memset(buffer, 0, sizeof(SuperBlock));
     char inode_buffer[sizeof(inodes)];
-    memset(inode_buffer, 0, sizeof(inodes));
     memset(super_block, 0, sizeof(SuperBlock));
+    memset(inodes, 0, sizeof(inodes));
     disk_stream.seekg(0, ios::beg);
-    disk_stream.read(buffer, sizeof(SuperBlock));
-    memcpy(super_block, buffer, sizeof(SuperBlock));
+    disk_stream.read((char *)super_block, sizeof(SuperBlock));
     disk_stream.seekg(super_block->inode_index * constants_disk_block_size, ios::beg);
-    disk_stream.read(inode_buffer, sizeof(inodes));
-    memcpy(inodes, inode_buffer, sizeof(inodes));
+    disk_stream.read((char *)inodes, sizeof(inodes));
 }
 FileMetaData *Disk::load_file_meta_data(Inode inode)
 {
     FileMetaData *meta = new FileMetaData;
     int byte_position = (data_block_starting_index + inode.meta_data_block) * constants_disk_block_size;
     disk_stream.seekg(byte_position, ios::beg);
-    char buffer[sizeof(FileMetaData)];
-    memset(buffer, 0, sizeof(FileMetaData));
-    disk_stream.read(buffer, sizeof(FileMetaData));
-    memcpy(meta, buffer, sizeof(FileMetaData));
+    disk_stream.read((char *)meta, sizeof(FileMetaData));
     return meta;
 }
 void Disk::save_file_meta_data(Inode inode, FileMetaData *meta)
 {
     int byte_position = (data_block_starting_index + inode.meta_data_block) * constants_disk_block_size;
-    char buffer[sizeof(FileMetaData)];
-    memset(buffer, 0, sizeof(FileMetaData));
-    memcpy(buffer, meta, sizeof(FileMetaData));
     disk_stream.seekp(byte_position, ios::beg);
-    disk_stream.write(buffer, sizeof(SuperBlock));
+    disk_stream.write((char *)meta, sizeof(SuperBlock));
 }
 void Disk::clear_file_meta_data(Inode inode)
 {
@@ -115,6 +104,7 @@ bool Disk::mount_disk()
             allocated_inodes.push_back(i);
         else
             free_inodes.push_back(i);
+        file_descriptor_reserve.push_back(i);
     }
     for (int i = 0; i < constants_data_block_limit; i++)
     {
@@ -125,6 +115,7 @@ bool Disk::mount_disk()
     }
     inode_starting_index = super_block->inode_index;
     data_block_starting_index = super_block->data_block_index;
+    reverse(file_descriptor_reserve.begin(), file_descriptor_reserve.end());
     load_files_info();
     return true;
 }
@@ -160,59 +151,65 @@ void create_disk(string disk_name)
     disk.super_block = super_block_init();
     for (int i = 0; i < disk.super_block->inodes; i++)
     {
-        disk.inodes[i].meta_data_block = -1;
-        memset(disk.inodes[i].pointers, -1, sizeof(disk.inodes[i].pointers));
+        clear_inode(&disk.inodes[i]);
     }
     disk.persist_disk_meta_data();
     disk.disk_stream.close();
     highlight_blue("<New disk created>\n");
 }
-
-void Disk::create_file()
-{
-    string file_name;
-    highlight_purple("Enter file name >>\n");
-    cin >> file_name;
-    if (file_name.size() > constants_file_name_size)
-    {
-        highlight_yellow("< File name crossed length limit >");
-        return;
-    }
-    if (file_info.find(file_name) != file_info.end())
-    {
-        highlight_red("< File already exists in disk >\n");
-        return;
-    }
-    if (free_inodes.empty())
-    {
-        highlight_red("< Maximum file limit reached >");
-        return;
-    }
-    int new_inode = free_inodes.back();
-    //set allocation bit to true
-    super_block->inode_map[new_inode] = true;
-    free_inodes.pop_back();
-    if (free_inodes.empty())
-    {
-        highlight_red("< Maximum data block limit reached >");
-        return;
-    }
-    int new_meta_data_block = free_data_blocks.back();
-    //set allocation bit to true
-    super_block->data_block_map[new_meta_data_block] = true;
-    free_data_blocks.pop_back();
-    inodes[new_inode].meta_data_block = new_meta_data_block;
-    FileMetaData *new_metadata = new FileMetaData;
-    memset(new_metadata->file_name, 0, sizeof(constants_file_name_size));
-    memcpy(new_metadata->file_name, file_name.c_str(), sizeof(file_name));
-    new_metadata->file_size = 0;
-    save_file_meta_data(inodes[new_inode], new_metadata);
-    file_info[file_name] = new_inode;
-}
-void Disk::delete_file()
-{
-}
 void Disk::disk_operations()
 {
-    unmount_disk();
+    int choice;
+    while (true)
+    {
+        line();
+        cout << "1.\tCreate file" << endl;
+        cout << "2.\tOpen file" << endl;
+        cout << "3.\tRead file" << endl;
+        cout << "4.\tWrite file" << endl;
+        cout << "5.\tAppend file" << endl;
+        cout << "6.\tClose file" << endl;
+        cout << "7.\tDelete file" << endl;
+        cout << "8.\tList of files" << endl;
+        cout << "9.\tList of opened files" << endl;
+        cout << "10.\tUnmount Disk" << endl;
+        line();
+        cin >> choice;
+        switch (choice)
+        {
+        case 1:
+            create_file();
+            break;
+        case 2:
+            open_file();
+            break;
+        case 3:
+            read_file();
+            break;
+        case 4:
+            write_file();
+            break;
+        case 5:
+            append_file();
+            break;
+        case 6:
+            close_file();
+            break;
+        case 7:
+            delete_file();
+            break;
+        case 8:
+            list_files();
+            break;
+        case 9:
+            list_open_files();
+            break;
+        case 10:
+            unmount_disk();
+            return;
+            break;
+        default:
+            highlight_red("< Wrong input >");
+        }
+    }
 }
