@@ -99,11 +99,11 @@ public:
     vector<int> free_data_blocks;
     vector<int> file_descriptor_reserve;
     // <filename| inode>
-    unordered_map<string, int> file_info;
+    map<string, int> file_info;
     // filename | filedescriptor
     unordered_map<string, int> open_file_name_map;
     // <filedescriptor| File>
-    unordered_map<int, File> open_files;
+    map<int, File> open_files;
     Disk()
     {
     }
@@ -123,7 +123,7 @@ public:
     void save_file_meta_data(Inode inode, FileMetaData *filemeta);
     void clear_file_meta_data(Inode inode);
     int read_disk_block(int disk_block, char *buffer);
-    int write_disk_block(int disk_block, char *buffer, int bytes);
+    int write_disk_block(int disk_block, char *buffer);
     bool mount_disk();
     void create_file();
     void open_file();
@@ -151,3 +151,4 @@ void highlight_cyan(string message);
 void highlight_yellow(string message);
 void highlight_purple(string message);
 void line();
+string multiline_input();

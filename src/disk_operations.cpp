@@ -22,7 +22,7 @@ SuperBlock *super_block_init()
     memset(super_block->data_block_map, 0, sizeof(sizeof(super_block->data_block_map)));
     return super_block;
 }
-void clear_inode(Inode *inode)
+void Disk::clear_inode(Inode *inode)
 {
     inode->meta_data_block = -1;
     memset(inode->pointers, -1, sizeof(inode->pointers));
@@ -63,16 +63,22 @@ void Disk::clear_file_meta_data(Inode inode)
 }
 int Disk::read_disk_block(int disk_block, char *buffer)
 {
+    char disk_buffer[constants_disk_block_size];
+    memset(disk_buffer, 0, constants_disk_block_size);
     int byte_position = (data_block_starting_index + disk_block) * constants_disk_block_size;
     disk_stream.seekg(byte_position, ios::beg);
-    disk_stream.read(buffer, sizeof(constants_disk_block_size));
+    disk_stream.read(disk_buffer, constants_disk_block_size);
+    memcpy(buffer, disk_buffer, constants_disk_block_size);
     return 0;
 }
-int Disk::write_disk_block(int disk_block, char *buffer, int bytes)
+int Disk::write_disk_block(int disk_block, char *buffer)
 {
+    char disk_buffer[constants_disk_block_size];
+    memset(disk_buffer, 0, constants_disk_block_size);
+    memcpy(disk_buffer, buffer, constants_disk_block_size);
     int byte_position = (data_block_starting_index + disk_block) * constants_disk_block_size;
     disk_stream.seekp(byte_position, ios::beg);
-    disk_stream.write(buffer, sizeof(bytes));
+    disk_stream.write(disk_buffer, constants_disk_block_size);
     return 0;
 }
 /**
@@ -92,7 +98,7 @@ bool Disk::mount_disk()
 {
     if (access(disk_name.c_str(), F_OK) == -1)
     {
-        highlight_red("!! Disk does not exist !!\n");
+        highlight_red(">> Disk does not exist <<\n");
         return false;
     }
     disk_stream.open(disk_name, ios::in | ios::out | ios::binary);
@@ -121,8 +127,14 @@ bool Disk::mount_disk()
 }
 int Disk::unmount_disk()
 {
+    if (!open_files.empty())
+    {
+        highlight_red(">> Files are currently open, Close first <<");
+        return 0;
+    }
     persist_disk_meta_data();
     disk_stream.close();
+    return 1;
 }
 void allocate_disk_space(string path, int size)
 {
@@ -141,28 +153,29 @@ void create_disk(string disk_name)
 {
     if (access(disk_name.c_str(), F_OK) != -1)
     {
-        highlight_red("A disk with this name already exists\n");
+        highlight_red(">> A disk with this name already exists <<\n");
         return;
     }
     //First allocate 512MB and create an empty disk file
     allocate_disk_space(disk_name, constants_disk_size);
     Disk disk = Disk(disk_name);
-    disk.disk_stream.open(disk_name, ios::out | ios::binary);
+    disk.disk_stream.open(disk_name, ios::in | ios::out | ios::binary);
     disk.super_block = super_block_init();
-    for (int i = 0; i < disk.super_block->inodes; i++)
+    for (int i = 0; i < constants_inode_limit; i++)
     {
-        clear_inode(&disk.inodes[i]);
+        disk.clear_inode(&disk.inodes[i]);
     }
     disk.persist_disk_meta_data();
+    disk.disk_stream.seekp(constants_disk_size, ios::beg);
     disk.disk_stream.close();
-    highlight_blue("<New disk created>\n");
+    highlight_blue(">> New disk created <<\n");
 }
 void Disk::disk_operations()
 {
-    int choice;
     while (true)
     {
         line();
+        cout << "\033[33m";
         cout << "1.\tCreate file" << endl;
         cout << "2.\tOpen file" << endl;
         cout << "3.\tRead file" << endl;
@@ -173,6 +186,8 @@ void Disk::disk_operations()
         cout << "8.\tList of files" << endl;
         cout << "9.\tList of opened files" << endl;
         cout << "10.\tUnmount Disk" << endl;
+        cout << "\033[0m";
+        int choice;
         line();
         cin >> choice;
         switch (choice)
@@ -209,7 +224,7 @@ void Disk::disk_operations()
             return;
             break;
         default:
-            highlight_red("< Wrong input >");
+            highlight_red(">> Wrong input <<\n");
         }
     }
 }

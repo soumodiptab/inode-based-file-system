@@ -1,4 +1,18 @@
 #include "file_system.h"
+string multiline_input()
+{
+    string input;
+    string line;
+    cin.ignore(1, '\n');
+    while (getline(cin, line))
+    {
+        if (line == "$")
+            break;
+
+        input += line + "\n";
+    }
+    return input;
+}
 void Disk::create_file()
 {
     string file_name;
@@ -6,26 +20,26 @@ void Disk::create_file()
     cin >> file_name;
     if (file_name.size() > constants_file_name_size)
     {
-        highlight_yellow("< File name crossed length limit >");
+        highlight_yellow(">> File name crossed length limit <<");
         return;
     }
     if (file_info.find(file_name) != file_info.end())
     {
-        highlight_red("< File already exists in disk >\n");
+        highlight_red(">> File already exists in disk <<\n");
         return;
     }
     if (free_inodes.empty())
     {
-        highlight_red("< Maximum file limit reached >");
+        highlight_red(">> Maximum file limit reached <<");
         return;
     }
     int new_inode = free_inodes.back();
     //set allocation bit to true
     super_block->inode_map[new_inode] = true;
     free_inodes.pop_back();
-    if (free_inodes.empty())
+    if (free_data_blocks.empty())
     {
-        highlight_red("< Maximum data block limit reached >");
+        highlight_red(">> Maximum data block limit reached <<");
         return;
     }
     int new_meta_data_block = free_data_blocks.back();
@@ -34,7 +48,7 @@ void Disk::create_file()
     free_data_blocks.pop_back();
     inodes[new_inode].meta_data_block = new_meta_data_block;
     FileMetaData *new_metadata = new FileMetaData;
-    memset(new_metadata->file_name, 0, sizeof(constants_file_name_size));
+    memset(new_metadata, 0, sizeof(FileMetaData));
     memcpy(new_metadata->file_name, file_name.c_str(), sizeof(file_name));
     new_metadata->file_size = 0;
     save_file_meta_data(inodes[new_inode], new_metadata);
@@ -47,20 +61,35 @@ void Disk::delete_file()
     cin >> file_name;
     if (file_info.find(file_name) == file_info.end())
     {
-        highlight_red("File does not exist\n");
+        highlight_red(">> File does not exist <<\n");
         return;
     }
     if (open_file_name_map.find(file_name) != open_file_name_map.end())
     {
-        highlight_red("File is open , close first\n");
+        highlight_red(">> File is open , close first <<\n");
         return;
     }
     int target_inode = file_info[file_name];
     allocated_inodes.erase(find(allocated_inodes.begin(), allocated_inodes.end(), target_inode));
     free_inodes.push_back(target_inode);
+    if (inodes[target_inode].meta_data_block != -1)
+    {
+        allocated_data_blocks.erase(find(allocated_data_blocks.begin(), allocated_data_blocks.end(), inodes[target_inode].meta_data_block));
+        free_data_blocks.push_back(inodes[target_inode].meta_data_block);
+        super_block->data_block_map[inodes[target_inode].meta_data_block] = false;
+    }
+    for (int i = 0; i < constants_inode_pointers; i++)
+    {
+        if (inodes[target_inode].pointers[i] == -1)
+            break;
+        allocated_data_blocks.erase(find(allocated_data_blocks.begin(), allocated_data_blocks.end(), inodes[target_inode].pointers[i]));
+        free_data_blocks.push_back(inodes[target_inode].pointers[i]);
+        super_block->data_block_map[inodes[target_inode].pointers[i]] = false;
+    }
     clear_inode(&inodes[target_inode]);
     super_block->inode_map[target_inode] = false;
     file_info.erase(file_name);
+    highlight_green(">> File has been deleted <<\n");
 }
 void Disk::open_file()
 {
@@ -69,20 +98,20 @@ void Disk::open_file()
     cin >> file_name;
     if (file_info.find(file_name) == file_info.end())
     {
-        highlight_red("File does not exist\n");
+        highlight_red(">> File does not exist <<\n");
         return;
     }
     if (open_file_name_map.find(file_name) != open_file_name_map.end())
     {
-        highlight_red("File is already open\n");
+        highlight_red(">> File is already open <<\n");
         return;
     }
     int mode;
     highlight_purple("Enter mode:\n1.Read\n2.Write\n3.Append\n");
     cin >> mode;
-    if (mode != 1 || mode != 2 || mode != 3)
+    if (mode != 1 && mode != 2 && mode != 3)
     {
-        highlight_red("Incorrect mode selected\n");
+        highlight_red(">> Incorrect mode selected <<\n");
         return;
     }
     int new_file_descriptor = file_descriptor_reserve.back();
@@ -90,7 +119,6 @@ void Disk::open_file()
     open_file_name_map[file_name] = new_file_descriptor;
     file_descriptor_reserve.pop_back();
     File new_file = File();
-    open_files[new_file_descriptor] = new_file;
     new_file.metadata = load_file_meta_data(inodes[target_inode]);
     new_file.inode = target_inode;
     new_file.file_name = string(new_file.metadata->file_name);
@@ -108,15 +136,17 @@ void Disk::open_file()
         read_disk_block(disk_block, buffer);
         new_file.disk_blocks.push_back(make_pair(disk_block, buffer));
     }
+    open_files[new_file_descriptor] = new_file;
+    highlight_green(">> " + new_file.file_name + " has been closed <<\n");
 }
 void Disk::close_file()
 {
     int file_descriptor;
-    highlight_purple("Enter file name >>\n");
+    highlight_purple("Enter file descriptor >>\n");
     cin >> file_descriptor;
     if (open_files.find(file_descriptor) == open_files.end())
     {
-        highlight_red("File is not open\n");
+        highlight_red(">> File is not open <<\n");
         return;
     }
     file_descriptor_reserve.push_back(file_descriptor);
@@ -132,28 +162,34 @@ void Disk::close_file()
             int disk_block = file.disk_blocks[i].first;
             char *buffer = file.disk_blocks[i].second;
             inodes[target_inode].pointers[i] = disk_block;
-            write_disk_block(disk_block, buffer, constants_disk_block_size);
+            write_disk_block(disk_block, buffer);
         }
     }
+    highlight_green(">> " + file.file_name + " has been closed <<\n");
     open_file_name_map.erase(file.file_name);
     open_files.erase(file_descriptor);
 }
 void Disk::read_file()
 {
-     int file_descriptor;
+    int file_descriptor;
     highlight_purple("Enter file descriptor >>\n");
     cin >> file_descriptor;
     if (open_files.find(file_descriptor) == open_files.end())
     {
-        highlight_red("File is not open\n");
+        highlight_red(">> File is not open <<\n");
         return;
     }
     if (open_files[file_descriptor].mode != 1)
     {
-        highlight_red("File is not open in read mode\n");
+        highlight_red(">> File is not open in read mode <<\n");
         return;
     }
-    
+    File &file = open_files[file_descriptor];
+    highlight_blue("Contents of the file :\n");
+    for (int i = 0; i < file.disk_blocks.size(); i++)
+    {
+        printf("%s", file.disk_blocks[i].second);
+    }
 }
 void Disk::write_file()
 {
@@ -162,19 +198,19 @@ void Disk::write_file()
     cin >> file_descriptor;
     if (open_files.find(file_descriptor) == open_files.end())
     {
-        highlight_red("File is not open\n");
+        highlight_red(">> File is not open <<\n");
         return;
     }
     if (open_files[file_descriptor].mode != 2)
     {
-        highlight_red("File is not open in write mode\n");
+        highlight_red(">> File is not open in write mode <<\n");
         return;
     }
     highlight_purple("Enter text for file >>\n");
-    string text;
-    getline(cin, text, static_cast<char>(EOF));
+    string text = multiline_input();
     File &file = open_files[file_descriptor];
     int write_blocks = ceil(((float)text.size()) / constants_disk_block_size);
+    file.metadata->file_size = text.size();
     int last_byte = text.size() % constants_disk_block_size;
     file.last_byte = last_byte;
     char buffer[write_blocks * constants_disk_block_size];
@@ -182,19 +218,18 @@ void Disk::write_file()
     memcpy(buffer, text.c_str(), text.size());
     if (write_blocks > constants_inode_pointers)
     {
-        highlight_red("Byte limit reached\n");
+        highlight_red(">> Byte limit reached <<\n");
         return;
     }
-
-    int offset = 0;
-    for (int i = 0; i < write_blocks; i++)
-    {
-        memcpy(file.disk_blocks[i].second, buffer + offset, constants_disk_block_size);
-        offset += constants_disk_block_size;
-    }
     //free the datablocks
-    if (write_blocks < file.disk_blocks.size())
+    if (write_blocks <= file.disk_blocks.size())
     {
+        int offset = 0;
+        for (int i = 0; i < write_blocks; i++)
+        {
+            memcpy(file.disk_blocks[i].second, buffer + offset, constants_disk_block_size);
+            offset += constants_disk_block_size;
+        }
         int free = file.disk_blocks.size() - write_blocks;
         while (free--)
         {
@@ -205,5 +240,100 @@ void Disk::write_file()
             super_block->data_block_map[data_info.first] = false;
         }
     }
-    highlight_green("Bytes have been written to the file\n");
+    else
+    {
+        int offset = 0;
+        int i = 0;
+        for (; i < file.disk_blocks.size(); i++)
+        {
+            memcpy(file.disk_blocks[i].second, buffer + offset, constants_disk_block_size);
+            offset += constants_disk_block_size;
+        }
+        for (; i < write_blocks; i++)
+        {
+            int new_disk_block = free_data_blocks.back();
+            free_data_blocks.pop_back();
+            super_block->data_block_map[new_disk_block] = true;
+            char *new_buffer = new char[constants_disk_block_size];
+            memcpy(new_buffer, buffer + offset, constants_disk_block_size);
+            offset += constants_disk_block_size;
+            file.disk_blocks.push_back(make_pair(new_disk_block, new_buffer));
+        }
+    }
+    highlight_green(">> " + to_string(text.size()) + "B have been written to " + file.file_name + " <<\n");
+}
+void Disk::append_file()
+{
+    int file_descriptor;
+    highlight_purple("Enter file descriptor >>\n");
+    cin >> file_descriptor;
+    if (open_files.find(file_descriptor) == open_files.end())
+    {
+        highlight_red(">> File is not open <<\n");
+        return;
+    }
+    if (open_files[file_descriptor].mode != 3)
+    {
+        highlight_red(">> File is not open in append mode <<\n");
+        return;
+    }
+    highlight_purple("Enter text for file >>\n");
+    string text = multiline_input();
+    File &file = open_files[file_descriptor];
+    int write_blocks = ceil(((float)text.size()) / constants_disk_block_size);
+    char buffer[write_blocks * constants_disk_block_size];
+    memset(buffer, 0, write_blocks * constants_disk_block_size);
+    memcpy(buffer, text.c_str(), text.size());
+    int remaining_bytes = constants_disk_block_size - file.last_byte;
+    int offset = file.last_byte;
+    if (file.last_byte != 0)
+    {
+        memcpy(file.disk_blocks[file.disk_blocks.size() - 1].second + offset, buffer, remaining_bytes);
+        offset += remaining_bytes;
+    }
+    if (text.size() > remaining_bytes)
+    {
+        while (offset < text.size())
+        {
+            int new_data_block = free_data_blocks.back();
+            free_data_blocks.pop_back();
+            super_block->data_block_map[new_data_block] = true;
+            char *data_block_buffer = new char[constants_disk_block_size];
+            memset(data_block_buffer, 0, constants_disk_block_size);
+            memcpy(data_block_buffer, buffer + offset, constants_disk_block_size);
+            offset += constants_disk_block_size;
+            file.disk_blocks.push_back(make_pair(new_data_block, data_block_buffer));
+        }
+    }
+    file.metadata->file_size += text.size();
+    highlight_green(">> " + to_string(text.size()) + "B have been written to " + file.file_name + " <<\n");
+}
+void Disk::list_files()
+{
+    if (file_info.empty())
+    {
+        highlight_red(">> No files present in Disk <<\n");
+        return;
+    }
+    highlight_blue("Files on Disk:\n");
+    for (auto file : file_info)
+    {
+        FileMetaData *meta = load_file_meta_data(inodes[file.second]);
+        highlight_cyan(file.first + "\t" + to_string(meta->file_size) + "B\n");
+    }
+}
+void Disk::list_open_files()
+{
+    if (open_files.empty())
+    {
+        highlight_red(">> No files currently open <<\n");
+        return;
+    }
+    highlight_blue("Open files:\n");
+    for (auto file : open_files)
+    {
+        int mode = file.second.mode;
+        char modec = (mode == 1) ? 'R' : ((mode == 2) ? 'W' : 'A');
+        highlight_cyan(to_string(file.first) + "->\t" + file.second.file_name + "\t" + modec + "\n");
+    }
 }
