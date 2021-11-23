@@ -136,7 +136,7 @@ public:
     void list_open_files();
 
     // persist all metadata
-    int unmount_disk();
+    bool unmount_disk();
     void disk_operations();
 };
 /***************************************************************************************************************************/

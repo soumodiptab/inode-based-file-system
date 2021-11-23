@@ -55,8 +55,8 @@ void main_menu()
     string disk_name;
     while (true)
     {
-
-        cout << "Simple File System" << endl;
+        line();
+        highlight_green("Simple File System\n");
         line();
         highlight_yellow("1. Create Disk\n");
         highlight_yellow("2. Mount Disk\n");

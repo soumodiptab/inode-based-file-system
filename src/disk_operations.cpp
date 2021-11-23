@@ -125,16 +125,16 @@ bool Disk::mount_disk()
     load_files_info();
     return true;
 }
-int Disk::unmount_disk()
+bool Disk::unmount_disk()
 {
     if (!open_files.empty())
     {
-        highlight_red(">> Files are currently open, Close first <<");
-        return 0;
+        highlight_red(">> Files are currently open, Close first <<\n");
+        return false;
     }
     persist_disk_meta_data();
     disk_stream.close();
-    return 1;
+    return true;
 }
 void allocate_disk_space(string path, int size)
 {
@@ -174,6 +174,8 @@ void Disk::disk_operations()
 {
     while (true)
     {
+        line();
+        highlight_green("[ <" + disk_name + "> Operations ]\n");
         line();
         cout << "\033[33m";
         cout << "1.\tCreate file" << endl;
@@ -220,8 +222,8 @@ void Disk::disk_operations()
             list_open_files();
             break;
         case 10:
-            unmount_disk();
-            return;
+            if (unmount_disk())
+                return;
             break;
         default:
             highlight_red(">> Wrong input <<\n");

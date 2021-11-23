@@ -137,7 +137,7 @@ void Disk::open_file()
         new_file.disk_blocks.push_back(make_pair(disk_block, buffer));
     }
     open_files[new_file_descriptor] = new_file;
-    highlight_green(">> " + new_file.file_name + " has been closed <<\n");
+    highlight_green(">> " + new_file.file_name + " has been opened <<\n");
 }
 void Disk::close_file()
 {
