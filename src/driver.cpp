@@ -58,9 +58,9 @@ void main_menu()
         line();
         highlight_green("Simple File System\n");
         line();
-        highlight_yellow("1. Create Disk\n");
-        highlight_yellow("2. Mount Disk\n");
-        highlight_yellow("3. Exit\n");
+        highlight_yellow("1.\tCreate Disk\n");
+        highlight_yellow("2.\tMount Disk\n");
+        highlight_yellow("3.\tExit\n");
         line();
         cin >> choice;
         if (choice == 1)

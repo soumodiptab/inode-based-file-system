@@ -125,6 +125,12 @@ bool Disk::mount_disk()
     load_files_info();
     return true;
 }
+/**
+ * @brief Persist all the disk meta-data i.e. inode allocation,deallocation. exiting without unmounting will cause all session changes to vanish
+ * 
+ * 
+ * @return true/false - files are closed / files are open 
+ */
 bool Disk::unmount_disk()
 {
     if (!open_files.empty())
@@ -136,6 +142,12 @@ bool Disk::unmount_disk()
     disk_stream.close();
     return true;
 }
+/**
+ * @brief Create a disk of given size
+ * 
+ * @param path 
+ * @param size 
+ */
 void allocate_disk_space(string path, int size)
 {
     fstream file;
@@ -177,18 +189,16 @@ void Disk::disk_operations()
         line();
         highlight_green("[ <" + disk_name + "> Operations ]\n");
         line();
-        cout << "\033[33m";
-        cout << "1.\tCreate file" << endl;
-        cout << "2.\tOpen file" << endl;
-        cout << "3.\tRead file" << endl;
-        cout << "4.\tWrite file" << endl;
-        cout << "5.\tAppend file" << endl;
-        cout << "6.\tClose file" << endl;
-        cout << "7.\tDelete file" << endl;
-        cout << "8.\tList of files" << endl;
-        cout << "9.\tList of opened files" << endl;
-        cout << "10.\tUnmount Disk" << endl;
-        cout << "\033[0m";
+        highlight_yellow("1.\tCreate file\n");
+        highlight_yellow("2.\tOpen file\n");
+        highlight_yellow("3.\tRead file\n");
+        highlight_yellow("4.\tWrite file\n");
+        highlight_yellow("5.\tAppend file\n");
+        highlight_yellow("6.\tClose file\n");
+        highlight_yellow("7.\tDelete file\n");
+        highlight_yellow("8.\tList of files\n");
+        highlight_yellow("9.\tList of opened files\n");
+        highlight_yellow("10.\tUnmount Disk\n");
         int choice;
         line();
         cin >> choice;

@@ -25,7 +25,7 @@ void Disk::create_file()
     }
     if (file_info.find(file_name) != file_info.end())
     {
-        highlight_red(">> File already exists in disk <<\n");
+        highlight_red(">> File with name already exists on disk <<\n");
         return;
     }
     if (free_inodes.empty())
@@ -53,7 +53,12 @@ void Disk::create_file()
     new_metadata->file_size = 0;
     save_file_meta_data(inodes[new_inode], new_metadata);
     file_info[file_name] = new_inode;
+    highlight_green(">> A new file [ " + file_name + " ] has been created on disk <<\n");
 }
+/**
+ * @brief De-allocate inode information from superblock and inode array
+ * 
+ */
 void Disk::delete_file()
 {
     string file_name;
@@ -66,7 +71,7 @@ void Disk::delete_file()
     }
     if (open_file_name_map.find(file_name) != open_file_name_map.end())
     {
-        highlight_red(">> File is open , close first <<\n");
+        highlight_red(">> File is currently open , close first <<\n");
         return;
     }
     int target_inode = file_info[file_name];
@@ -91,6 +96,10 @@ void Disk::delete_file()
     file_info.erase(file_name);
     highlight_green(">> File has been deleted <<\n");
 }
+/**
+ * @brief Open file with available file-descriptors
+ * 
+ */
 void Disk::open_file()
 {
     string file_name;
@@ -137,8 +146,12 @@ void Disk::open_file()
         new_file.disk_blocks.push_back(make_pair(disk_block, buffer));
     }
     open_files[new_file_descriptor] = new_file;
-    highlight_green(">> " + new_file.file_name + " has been opened <<\n");
+    string modec = (mode == 1) ? "Read" : ((mode == 2) ? "Write" : "Append");
+    highlight_green(">> " + new_file.file_name + " has been opened  in " + modec + " mode with file-descriptor: [" + to_string(new_file_descriptor) + "] <<\n");
 }
+/**
+ * @brief Persists file data to disk, Exiting without closing file will cause file to lose session changes
+ */
 void Disk::close_file()
 {
     int file_descriptor;
@@ -146,13 +159,13 @@ void Disk::close_file()
     cin >> file_descriptor;
     if (open_files.find(file_descriptor) == open_files.end())
     {
-        highlight_red(">> File is not open <<\n");
+        highlight_red(">> No files open with given file-descriptor <<\n");
         return;
     }
     file_descriptor_reserve.push_back(file_descriptor);
     File &file = open_files[file_descriptor];
     int target_inode = file.inode;
-    // if mode =1 dont do any persisting
+    // if mode = 1(read) dont do any persisting
     if (open_files[file_descriptor].mode > 1)
     {
         save_file_meta_data(inodes[target_inode], file.metadata);
@@ -176,7 +189,7 @@ void Disk::read_file()
     cin >> file_descriptor;
     if (open_files.find(file_descriptor) == open_files.end())
     {
-        highlight_red(">> File is not open <<\n");
+        highlight_red(">> No files open with given file-descriptor <<\n");
         return;
     }
     if (open_files[file_descriptor].mode != 1)
@@ -186,10 +199,13 @@ void Disk::read_file()
     }
     File &file = open_files[file_descriptor];
     highlight_blue("Contents of the file :\n");
+    line();
+    cout << "\033[35m";
     for (int i = 0; i < file.disk_blocks.size(); i++)
     {
         printf("%s", file.disk_blocks[i].second);
     }
+    cout << "\033[0m";
 }
 void Disk::write_file()
 {
@@ -198,7 +214,7 @@ void Disk::write_file()
     cin >> file_descriptor;
     if (open_files.find(file_descriptor) == open_files.end())
     {
-        highlight_red(">> File is not open <<\n");
+        highlight_red(">> No files open with given file-descriptor <<\n");
         return;
     }
     if (open_files[file_descriptor].mode != 2)
@@ -306,7 +322,8 @@ void Disk::append_file()
         }
     }
     file.metadata->file_size += text.size();
-    highlight_green(">> " + to_string(text.size()) + "B have been written to " + file.file_name + " <<\n");
+    highlight_green(">> " + to_string(text.size()) + "B have been appended to " + file.file_name + " <<\n");
+    highlight_green(">> Total file size: " + to_string(file.metadata->file_size) + "B <<\n");
 }
 void Disk::list_files()
 {
@@ -334,6 +351,6 @@ void Disk::list_open_files()
     {
         int mode = file.second.mode;
         char modec = (mode == 1) ? 'R' : ((mode == 2) ? 'W' : 'A');
-        highlight_cyan(to_string(file.first) + "->\t" + file.second.file_name + "\t" + modec + "\n");
+        highlight_cyan(to_string(file.first) + "\t->\t" + file.second.file_name + "\t" + modec + "\n");
     }
 }
